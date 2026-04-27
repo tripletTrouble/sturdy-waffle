@@ -19,7 +19,7 @@
   }
 </script>
 
-<form onsubmit={handleSubmit} class="mb-5">
+<form class="mb-5">
   <div class="w-full flex gap-3 items-center">
     <textarea
       bind:this={input}
@@ -30,7 +30,7 @@
       onkeydown={handleKeyDown}
       bind:value
     ></textarea>
-    <Button type="submit" size="icon-sm">
+    <Button type="button" onclick={handleSubmit} size="icon-sm">
       <PlusIcon />
     </Button>
   </div>
