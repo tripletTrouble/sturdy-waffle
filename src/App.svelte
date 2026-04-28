@@ -5,19 +5,27 @@
   import CreateTodo from "$lib/components/CreateTodo.svelte";
   import type { Task } from "$lib/types";
   import TodoItem from "$lib/components/TodoItem.svelte";
-  import { v4 as uuid } from "uuid";
+  import { v4 as uuid, v4 } from "uuid";
   import { onMount } from "svelte";
   import { slide } from "svelte/transition";
+  import { liveQuery } from "dexie";
+  import db from "$lib/db";
 
   let title: string | undefined = $state(undefined);
-  let tasks: Task[] = $state([]);
+  let tasks = liveQuery(async () => await db.tasks.toArray());
   let undone = $derived(
-    tasks.reduce((current: number, task: Task) => {
-      if (task.doneAt === null) {
-        return current + 1;
+    (() => {
+      if ($tasks) {
+        return $tasks.reduce((current: number, task: Task) => {
+          if (task.doneAt === null) {
+            return current + 1;
+          }
+          return current;
+        }, 0);
+      }else {
+        return 0;
       }
-      return current;
-    }, 0),
+    })(),
   );
   const quotes: { author: string; quote: string }[] = [
     {
@@ -122,13 +130,14 @@
     return () => clearInterval(id);
   });
 
-  function handleCreate() {
+  async function handleCreate() {
     if (title) {
-      tasks.push({
-        id: uuid(),
+      // Dexie
+      await db.tasks.add({
+        id: v4(),
+        title,
         createdAt: new Date().getTime(),
         doneAt: null,
-        title,
       });
 
       title = undefined;
@@ -136,13 +145,7 @@
   }
 
   function handleDelete(task: Task) {
-    tasks = tasks.reduce((acc: Task[], current: Task) => {
-      if (task.id !== current.id) {
-        acc.push(current);
-      }
-
-      return acc;
-    }, []);
+    db.tasks.delete(task.id);
   }
 </script>
 
@@ -164,9 +167,9 @@
       {/if}
       <CreateTodo bind:value={title} handleSubmit={handleCreate} />
       <div class="grid grid-cols-1 gap-3">
-        {#if tasks.length}
-          {#each tasks as tsk, ix (tsk.id)}
-            <TodoItem {handleDelete} bind:task={tasks[ix]} />
+        {#if $tasks && $tasks.length}
+          {#each $tasks as tsk, ix (tsk.id)}
+            <TodoItem {handleDelete} bind:task={$tasks[ix]} />
           {/each}
         {:else}
           <p class="mt-5 font-semibold text-center">No taks found.</p>
