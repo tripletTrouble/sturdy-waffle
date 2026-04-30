@@ -25,7 +25,7 @@
       bind:this={input}
       oninput={handleInput}
       rows="1"
-      class="overflow-hidden outline-0 border-0 resize-none border-b-2 border-muted-foreground w-full focus:ring-0 focus:bg-muted rounded-t-md"
+      class="overflow-hidden outline-0 border-0 resize-none border-b-2 border-muted-foreground w-full bg-transparent focus:ring-0 focus:bg-muted rounded-t-md"
       placeholder="Write your task here"
       onkeydown={handleKeyDown}
       bind:value

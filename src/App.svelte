@@ -1,7 +1,7 @@
 <script lang="ts">
   import "./app.css";
   import { greet } from "$lib/greeter";
-  import { Card, CardContent, CardFooter } from "$lib/components/ui/card";
+  import { Card, CardContent, CardFooter, CardHeader } from "$lib/components/ui/card";
   import CreateTodo from "$lib/components/CreateTodo.svelte";
   import type { Task } from "$lib/types";
   import TodoItem from "$lib/components/TodoItem.svelte";
@@ -10,8 +10,13 @@
   import { slide } from "svelte/transition";
   import { liveQuery } from "dexie";
   import db from "$lib/db";
+  import Button from "$lib/components/ui/button/button.svelte";
+  import { SettingsIcon } from "@lucide/svelte";
+  import Setting from "$lib/components/Setting.svelte";
+  import { ModeWatcher } from "mode-watcher";
 
   let title: string | undefined = $state(undefined);
+  let isSettingOpen: boolean = $state(false);
   let tasks = liveQuery(async () => await db.tasks.toArray());
   let undone = $derived(
     (() => {
@@ -149,8 +154,16 @@
   }
 </script>
 
+<ModeWatcher/>
 <div class="min-h-screen w-screen flex items-center justify-center">
   <Card class="w-[90%] min-h-[90%] md:w-[70%] lg:w-[50%] xl:w-[40%] my-10">
+    <CardHeader>
+      <div class="flex justify-end">
+        <Button variant="ghost" onclick={() => isSettingOpen = true}>
+          <SettingsIcon class="size-6"></SettingsIcon>
+        </Button>
+      </div>
+    </CardHeader>
     <CardContent>
       <h1
         class="font-semibold text-lg md:text-xl lg:text-2xl xl:text-3xl text-center mb-3"
@@ -207,4 +220,6 @@
       </div>
     </CardFooter>
   </Card>
+
+  <Setting bind:isOpen={isSettingOpen} />
 </div>
