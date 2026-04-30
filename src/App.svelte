@@ -1,7 +1,12 @@
 <script lang="ts">
   import "./app.css";
   import { greet } from "$lib/greeter";
-  import { Card, CardContent, CardFooter, CardHeader } from "$lib/components/ui/card";
+  import {
+    Card,
+    CardContent,
+    CardFooter,
+    CardHeader,
+  } from "$lib/components/ui/card";
   import CreateTodo from "$lib/components/CreateTodo.svelte";
   import type { Task } from "$lib/types";
   import TodoItem from "$lib/components/TodoItem.svelte";
@@ -14,6 +19,7 @@
   import { SettingsIcon } from "@lucide/svelte";
   import Setting from "$lib/components/Setting.svelte";
   import { ModeWatcher } from "mode-watcher";
+  import { toast, Toaster } from "svelte-sonner";
 
   let title: string | undefined = $state(undefined);
   let isSettingOpen: boolean = $state(false);
@@ -27,7 +33,7 @@
           }
           return current;
         }, 0);
-      }else {
+      } else {
         return 0;
       }
     })(),
@@ -131,8 +137,26 @@
     const id = setInterval(() => {
       currentQuoteIndex = (currentQuoteIndex + 1) % quotes.length;
     }, 7_000);
+    const syncInterval: number = Number(
+      window.localStorage.getItem("syncInterval")?.replace("_", "") ?? 10_000,
+    );
+    const syncUrl: string = String(window.localStorage.getItem("syncUrl"));
+    let sync: number;
+    if (syncInterval && syncUrl) {
+      // Pull tasks
+      pullTasks(syncUrl);
+      sync = setInterval(async () => {
+        await syncData(syncUrl);
+      }, syncInterval);
+    }
 
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+
+      if (sync) {
+        clearInterval(sync);
+      }
+    };
   });
 
   async function handleCreate() {
@@ -152,14 +176,47 @@
   function handleDelete(task: Task) {
     db.tasks.delete(task.id);
   }
+
+  const syncData = async (syncUrl: string) => {
+    const tasks = await db.tasks.toArray();
+    try {
+      const res = await fetch(syncUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          secret: "CHANGE_ME",
+          tasks,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success("Task data synced successfuly");
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+  const pullTasks = async (syncUrl: string) => {
+    try {
+      const res = await fetch(`${syncUrl}?secret=CHANGE_ME`);
+
+      if (res.ok) {
+        const data = await res.json() as {success: boolean, tasks: Task[]};
+
+        db.tasks.bulkAdd(data.tasks);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
 </script>
 
-<ModeWatcher/>
+<Toaster position="top-right" richColors={true} />
+<ModeWatcher />
 <div class="min-h-screen w-screen flex items-center justify-center">
   <Card class="w-[90%] min-h-[90%] md:w-[70%] lg:w-[50%] xl:w-[40%] my-10">
     <CardHeader>
       <div class="flex justify-end">
-        <Button variant="ghost" onclick={() => isSettingOpen = true}>
+        <Button variant="ghost" onclick={() => (isSettingOpen = true)}>
           <SettingsIcon class="size-6"></SettingsIcon>
         </Button>
       </div>
