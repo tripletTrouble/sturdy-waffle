@@ -16,10 +16,12 @@
   import { liveQuery } from "dexie";
   import db from "$lib/db";
   import Button from "$lib/components/ui/button/button.svelte";
-  import { SettingsIcon } from "@lucide/svelte";
+  import { ArrowBigDownIcon, ArrowBigUpIcon, SettingsIcon } from "@lucide/svelte";
   import Setting from "$lib/components/Setting.svelte";
   import { ModeWatcher } from "mode-watcher";
   import { toast, Toaster } from "svelte-sonner";
+  import { sync, pull, push } from "$lib/sync.svelte";
+  import ConfirmPull from "$lib/components/ConfirmPull.svelte";
 
   let title: string | undefined = $state(undefined);
   let isSettingOpen: boolean = $state(false);
@@ -132,30 +134,18 @@
     },
   ];
   let currentQuoteIndex = $state(Math.round(Math.random() * 20));
+  let isConfirmPullOpen = $state(false);
 
   onMount(() => {
     const id = setInterval(() => {
       currentQuoteIndex = (currentQuoteIndex + 1) % quotes.length;
     }, 7_000);
-    const syncInterval: number = Number(
-      window.localStorage.getItem("syncInterval")?.replace("_", "") ?? 10_000,
-    );
-    const syncUrl: string = String(window.localStorage.getItem("syncUrl"));
-    let sync: number;
-    if (syncInterval && syncUrl) {
-      // Pull tasks
-      pullTasks(syncUrl);
-      sync = setInterval(async () => {
-        await syncData(syncUrl);
-      }, syncInterval);
-    }
+
+    sync.syncUrl = window.localStorage.getItem("syncUrl") ?? null;
+    sync.syncSecretKey = window.localStorage.getItem("syncSecretKey") ?? 'CHANGE_ME';
 
     return () => {
       clearInterval(id);
-
-      if (sync) {
-        clearInterval(sync);
-      }
     };
   });
 
@@ -177,48 +167,71 @@
     db.tasks.delete(task.id);
   }
 
-  const syncData = async (syncUrl: string) => {
-    const tasks = await db.tasks.toArray();
-    try {
-      const res = await fetch(syncUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          secret: "CHANGE_ME",
-          tasks,
-        }),
-      });
+  async function handlePull() {
+    if ($tasks.length === 0) {
+      // Pull data from Google Sheets and add to Dexie
+      isConfirmPullOpen = false;
+      
+      const { success, error, data }: { success: boolean; error?: unknown | Error; data?: Task[] } = await pull();
 
-      if (res.ok) {
-        toast.success("Task data synced successfuly");
+      if (success && data) {
+        // Clear existing tasks
+        await db.tasks.clear();
+
+        // Add pulled tasks to Dexie
+        const tasksToAdd = data.map((item) => ({
+          id: item.id,
+          title: item.title,
+          createdAt: item.createdAt,
+          doneAt: item.doneAt,
+        }));
+        await db.tasks.bulkAdd(tasksToAdd);
+
+        toast.success("Data pulled successfully!");
+      } else {
+        if (error instanceof Error) {
+          toast.error(`Failed to pull data: ${error.message}`);
+        } else {
+          toast.error("Something went wrong while pulling data.");
+        }
       }
-    } catch (error) {
-      console.error(error);
+    } else {
+      isConfirmPullOpen = true;
     }
-  };
-  const pullTasks = async (syncUrl: string) => {
-    try {
-      const res = await fetch(`${syncUrl}?secret=CHANGE_ME`);
+  }
 
-      if (res.ok) {
-        const data = await res.json() as {success: boolean, tasks: Task[]};
-
-        db.tasks.bulkAdd(data.tasks);
+  async function handlePush() {
+    const { success, error }: { success: boolean; error?: unknown | Error } = await push($tasks);
+    if (success) {
+      toast.success("Data pushed successfully!");
+    } else {
+      if (error instanceof Error) {
+        toast.error(`Failed to push data: ${error.message}`);
+      } else {
+        toast.error("Something went wrong while pushing data.");
       }
-    } catch (error) {
-      console.error(error);
     }
-  };
+  }
 </script>
 
 <Toaster position="top-right" richColors={true} />
 <ModeWatcher />
+<ConfirmPull bind:isOpen={isConfirmPullOpen} handlePull={handlePull} />
 <div class="min-h-screen w-screen flex items-center justify-center">
   <Card class="w-[90%] min-h-[90%] md:w-[70%] lg:w-[50%] xl:w-[40%] my-10">
     <CardHeader>
-      <div class="flex justify-end">
-        <Button variant="ghost" onclick={() => (isSettingOpen = true)}>
+      <div class="flex justify-end gap-1">
+        <Button variant="ghost" size="icon" onclick={() => (isSettingOpen = true)} title="Open settings">
           <SettingsIcon class="size-6"></SettingsIcon>
         </Button>
+        {#if (sync.syncUrl ?? "").trim() !== ""}
+          <Button variant="ghost" size="icon" title="Push to Google Sheets" onclick={handlePush}>
+            <ArrowBigUpIcon class="size-6" />
+          </Button>
+          <Button variant="ghost" size="icon" title="Pull from Google Sheets" onclick={handlePull}>
+            <ArrowBigDownIcon class="size-6" />
+          </Button>
+        {/if}
       </div>
     </CardHeader>
     <CardContent>
@@ -233,7 +246,7 @@
           {undone > 1 ? "tasks" : "task"} today.
         </p>
       {:else}
-        <p class="mb-7 text-center text-sm">No task for today.</p>
+        <p class="mb-7 text-center text-sm text-emerald-500">No task for today.</p>
       {/if}
       <CreateTodo bind:value={title} handleSubmit={handleCreate} />
       <div class="grid grid-cols-1 gap-3">
@@ -258,7 +271,7 @@
             </div>
           {/key}
         {/if}
-        <p class="text-sm text-center w-full mt-5 font-medium">
+        <p class="text-sm text-center w-full mt-8 font-medium">
           Creafted with <svg
             xmlns="http://www.w3.org/2000/svg"
             width="16"
@@ -272,7 +285,7 @@
               d="M8 1.314C12.438-3.248 23.534 4.735 8 15-7.534 4.736 3.562-3.248 8 1.314"
             />
           </svg>
-          by <a href="https://github.com/triplettrouble">Deri Prasetyo</a>
+          by <a href="https://github.com/triplettrouble" class="text-blue-500 font-semibold">Deri Prasetyo</a>
         </p>
       </div>
     </CardFooter>
