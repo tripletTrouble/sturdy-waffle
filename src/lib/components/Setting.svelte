@@ -14,6 +14,7 @@
   import { Textarea } from "./ui/textarea";
   import { toast } from "svelte-sonner";
   import { sync } from "$lib/sync.svelte";
+  import { link } from "svelte-spa-router";
 
   let { isOpen = $bindable() }: { isOpen: boolean } = $props();
 
@@ -73,8 +74,8 @@
         <div class="grid space-y-1">
           <div class="font-semibold">Sync URL</div>
           <div class="text-xs">
-            You can sync your task to Google Sheet. <a
-              href="#a"
+            You can sync your task to Google Sheet. <a use:link
+              href="/sync-guide"
               class="text-blue-500">Learn More</a
             >
           </div>
